@@ -36,6 +36,20 @@ title, heading, text and bullet styles are reused. It's included in the repo.
 
 ## 3. Start the app
 
+### Easiest: double-click launcher
+
+- **macOS / Linux:** double-click **`launch-cv-generator.command`**
+- **Windows:** double-click **`launch-cv-generator.bat`**
+
+The launcher starts the server and opens the app in your browser automatically.
+Keep the window it opens open while using the app; close it (or press **Ctrl+C**) to
+stop. If the app is already running, it just reopens the browser.
+
+> On macOS the first run may show *"unidentified developer"* — right-click the file →
+> **Open** → **Open**, and it will run without asking again.
+
+### Or from the terminal
+
 ```bash
 python3 app.py
 ```
@@ -46,9 +60,7 @@ You should see:
 Server running on http://127.0.0.1:8000
 ```
 
-Open **http://127.0.0.1:8000** in your browser.
-
-To stop the server: press **Ctrl+C** in the terminal.
+Open **http://127.0.0.1:8000** in your browser. To stop the server: press **Ctrl+C**.
 
 ---
 
