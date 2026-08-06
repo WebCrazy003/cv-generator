@@ -45,16 +45,37 @@ def sanitize_name(value):
 # ---------------------------------------------------------------------------
 # DOCX generation
 #
-# The template (e.g. Robson Oliveira_Brazil.docx) is a fully-formatted sample
-# CV. Rather than string-replacing tokens (which fails because tokens are split
-# across runs and are followed by hardcoded content), we treat the template as a
-# *style carrier*: we harvest one "prototype" paragraph per element type, wipe
-# the body, then rebuild the document from the JSON data by cloning those
-# prototypes. Cloning preserves the exact fonts, colors, list numbering and
-# paragraph styles of the original template.
+# The template (cv_template.docx) is a fully-formatted sample CV. Rather than
+# string-replacing tokens (which fails because tokens are split across runs and
+# are followed by hardcoded content), we treat the template as a *style carrier*:
+# we harvest one "prototype" paragraph per element type, wipe the body, then
+# rebuild the document from the JSON data by cloning those prototypes. Cloning
+# preserves the exact fonts, colors, list numbering and paragraph styles of the
+# original template.
 # ---------------------------------------------------------------------------
 
 MARKER_RE = re.compile(r"\{\{[^}]*\}\}|\[\[[^\]]*\]\]")
+
+# LibreOffice (used for PDF conversion) cannot resolve the macOS font family
+# name "Avenir Book" and silently falls back to a serif (Liberation Serif),
+# which does not match the template. The plain "Avenir" family name resolves to
+# the same typeface (Avenir Roman), so remap it before conversion. Only the PDF
+# is kept, so rewriting the font name in the intermediate DOCX is harmless.
+FONT_REMAP = {"Avenir Book": "Avenir"}
+
+# LibreOffice floats the large first line (the name) ~8pt above the page's top
+# margin, so the PDF looks top-cramped compared to Word, which clamps the first
+# line to the margin. Add a little space before the name so the PDF starts at
+# the top margin like the DOCX does. Tuned to the template's name size (35pt).
+NAME_TOP_PADDING_TWIPS = 200
+
+
+def normalize_fonts(document, mapping=FONT_REMAP):
+    for rfonts in document.element.iter(qn("w:rFonts")):
+        for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+            value = rfonts.get(qn(attr))
+            if value in mapping:
+                rfonts.set(qn(attr), mapping[value])
 
 
 def _pstyle_id(paragraph):
@@ -228,7 +249,23 @@ def build_docx(template_path, data, output_path):
         line = " | ".join(part for part in (university, degree) if part)
         emit("education", line)
 
+    normalize_fonts(document)
+    _pad_first_paragraph_top(document)
     document.save(str(output_path))
+
+
+def _pad_first_paragraph_top(document, twips=NAME_TOP_PADDING_TWIPS):
+    paragraphs = document.paragraphs
+    if not paragraphs:
+        return
+    ppr = paragraphs[0]._p.find(qn("w:pPr"))
+    if ppr is None:
+        return
+    spacing = ppr.find(qn("w:spacing"))
+    if spacing is None:
+        spacing = OxmlElement("w:spacing")
+        ppr.append(spacing)
+    spacing.set(qn("w:before"), str(twips))
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +441,14 @@ class CvGeneratorHandler(BaseHTTPRequestHandler):
                 build_docx(TEMPLATE_FILE, data, docx_path)
                 warning = convert_to_pdf(docx_path, pdf_path)
 
-                response = {"status": "success", "pdfPath": str(pdf_path), "docxPath": str(docx_path)}
+                # Only the PDF is wanted; drop the intermediate DOCX once the PDF exists.
+                if pdf_path.exists():
+                    try:
+                        docx_path.unlink()
+                    except OSError:
+                        pass
+
+                response = {"status": "success", "pdfPath": str(pdf_path)}
                 if warning:
                     response["warning"] = warning
                 self._send_json(response)

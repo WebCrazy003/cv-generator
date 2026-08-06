@@ -72,6 +72,22 @@ def test_output_drops_original_sample_content():
         assert sample not in text, sample
 
 
+def test_body_font_normalized_for_pdf():
+    output, _ = _generate()
+    from docx.oxml.ns import qn
+
+    fonts = set()
+    for rfonts in Document(str(output)).element.iter(qn("w:rFonts")):
+        for attr in ("w:ascii", "w:hAnsi"):
+            value = rfonts.get(qn(attr))
+            if value:
+                fonts.add(value)
+    # "Avenir Book" does not resolve in LibreOffice (falls back to serif); it is
+    # remapped to "Avenir" so the PDF renders the intended sans-serif.
+    assert "Avenir Book" not in fonts
+    assert "Avenir" in fonts
+
+
 def test_section_styles_preserved():
     output, _ = _generate()
     from docx.oxml.ns import qn

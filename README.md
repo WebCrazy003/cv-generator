@@ -1,7 +1,7 @@
 # CV Generator
 
 A local web app that fills a styled DOCX CV template from JSON data and outputs a
-matching DOCX and PDF.
+styled PDF. (A DOCX is built internally as a step and then removed — only the PDF is kept.)
 
 ## How it works
 
@@ -40,8 +40,8 @@ Then open http://127.0.0.1:8000 and:
 
 1. Paste JSON CV data (see the default sample for the expected shape).
 2. Set an **output base folder** (remembered across sessions).
-3. Generate — outputs land in
-   `<base>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.pdf` (and `.docx`).
+3. Generate — the PDF lands at
+   `<base>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.pdf`.
 
 The template is fixed (`cv_template.docx`, next to `app.py`); there is no template picker.
 

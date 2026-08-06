@@ -15,8 +15,8 @@ A step-by-step guide to running the app locally and generating a CV.
 All three are already installed on this machine (Python 3.9.6, python-docx 1.2.0,
 LibreOffice 26.2.5).
 
-> LibreOffice is **optional**: without it the app still generates the DOCX and a plain-text
-> PDF fallback (with a warning). For a styled PDF that matches the DOCX, keep it installed:
+> LibreOffice is **optional**: without it the app falls back to a plain-text PDF (with a
+> warning). For a styled PDF that matches the template, keep it installed:
 > `brew install --cask libreoffice`.
 
 ---
@@ -57,14 +57,13 @@ To stop the server: press **Ctrl+C** in the terminal.
 1. **Paste JSON** CV data into the text area (a sample is pre-filled — see the shape below).
 2. **Set the output base folder** — e.g. `/Users/minimac/Documents/CVs`. This is remembered
    for next time.
-3. Click **Generate CV (DOCX + PDF)**.
-4. The status line shows the exact paths of the created files.
+3. Click **Generate CV (PDF)**.
+4. The status line shows the exact path of the created PDF.
 
-### Where files go
+### Where the file goes
 
 ```
 <output base folder>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.pdf
-<output base folder>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.docx
 ```
 
 Example: base `/Users/minimac/Documents/CVs`, run on 2026-08-06, for Jane Doe applying to

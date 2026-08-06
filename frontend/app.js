@@ -69,7 +69,7 @@ function App() {
       if (!response.ok || data.error) {
         throw new Error(data.error || "Generation failed.");
       }
-      const base = `Created DOCX at ${data.docxPath} and PDF at ${data.pdfPath}`;
+      const base = `PDF created at ${data.pdfPath}`;
       setStatus({ type: "success", message: data.warning ? `${base} — ${data.warning}` : base });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Generation failed." });
@@ -88,7 +88,7 @@ function App() {
       <h1>CV Generator</h1>
       <p className="muted">Paste JSON data and choose an output base folder. The CV is generated from
         the bundled <code>cv_template.docx</code>, reusing its title, heading, text and bullet styles,
-        and saved as a styled DOCX and PDF.</p>
+        and saved as a styled PDF.</p>
 
       <label><strong>JSON input</strong></label>
       <textarea value={jsonContent} onChange={(event) => setJsonContent(event.target.value)} />
@@ -97,13 +97,13 @@ function App() {
         <div style={{ flex: 1 }}>
           <label><strong>Output base folder</strong></label>
           <input type="text" value={outputDirectory} onChange={handleOutputDirectoryChange} placeholder="/path/to/output" />
-          <p className="muted">Files are written to <code>&lt;base&gt;/&lt;yy_mm_dd&gt;/&lt;personNameOnCV&gt;_&lt;companyNameApplyJob&gt;.pdf</code> (and .docx).</p>
+          <p className="muted">The PDF is written to <code>&lt;base&gt;/&lt;yy_mm_dd&gt;/&lt;personNameOnCV&gt;_&lt;companyNameApplyJob&gt;.pdf</code>.</p>
         </div>
       </div>
 
       <div className="row">
         <button onClick={handleGenerate} disabled={!canGenerate || isGenerating}>
-          {isGenerating ? "Generating..." : "Generate CV (DOCX + PDF)"}
+          {isGenerating ? "Generating..." : "Generate CV (PDF)"}
         </button>
       </div>
       {status.message ? <div className={`status ${status.type}`}>{status.message}</div> : null}
