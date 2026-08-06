@@ -5,12 +5,12 @@ matching DOCX and PDF.
 
 ## How it works
 
-The selected DOCX template (e.g. `Robson Oliveira_Brazil.docx`) is used as a **style
-carrier**. The generator harvests one prototype paragraph per element type (name,
-contact, summary, section header, job date, job title, bullet, skill line, education
-line), wipes the body, and rebuilds the document from your JSON by cloning those
-prototypes — so fonts, colors, list numbering and layout match the template exactly,
-with no leftover placeholder tokens or sample content.
+The bundled `cv_template.docx` is used as a **style carrier**. The generator harvests
+one prototype paragraph per element type (name/title, contact, summary, section header,
+job date, job title, bullet, skill line, education line), wipes the body, and rebuilds
+the document from your JSON by cloning those prototypes — so the title, heading, text,
+bullet-point styles and overall layout match the template exactly, with no leftover
+placeholder tokens or sample content.
 
 ## Setup
 
@@ -39,16 +39,18 @@ python3 app.py
 Then open http://127.0.0.1:8000 and:
 
 1. Paste JSON CV data (see the default sample for the expected shape).
-2. Add the path to a DOCX template and select it.
-3. Set an output directory.
-4. Generate — outputs land in `<output>/<yy_mm_dd>/<name>_<company>.docx` and `.pdf`.
+2. Set an **output base folder** (remembered across sessions).
+3. Generate — outputs land in
+   `<base>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.pdf` (and `.docx`).
+
+The template is fixed (`cv_template.docx`, next to `app.py`); there is no template picker.
 
 ### JSON shape
 
 ```json
 {
   "companyNameApplyJob": "Acme Corp",
-  "name": "Jane Doe",
+  "personNameOnCV": "Jane Doe",
   "contact": "Berlin, Germany • jane.doe@example.com",
   "summary": "…",
   "experience": [

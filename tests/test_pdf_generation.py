@@ -4,7 +4,7 @@ from pathlib import Path
 
 import app
 
-TEMPLATE = Path(__file__).resolve().parent.parent / "Robson Oliveira_Brazil.docx"
+TEMPLATE = Path(__file__).resolve().parent.parent / "cv_template.docx"
 
 
 class PdfGenerationTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class PdfGenerationTests(unittest.TestCase):
             docx_path = Path(tmp_dir) / "cv.docx"
             pdf_path = Path(tmp_dir) / "cv.pdf"
             data = {
-                "name": "Jane Doe",
+                "personNameOnCV": "Jane Doe",
                 "summary": "Engineer",
                 "experience": [{"companyName": "SoftXPro", "jobTitle": "Eng",
                                 "startDate": "2023", "endDate": "2026", "content": ["Did work"]}],

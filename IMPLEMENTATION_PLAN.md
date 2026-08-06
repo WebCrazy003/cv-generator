@@ -47,12 +47,20 @@ template as a *style carrier*:
 - ✅ Hygiene: path-traversal guard, dated folder from `%y_%m_%d`, dead code removed,
   `.claude/settings.local.json` untracked.
 
+## Later refinement (shipped)
+- **Fixed template:** the template is now the bundled `cv_template.docx` (renamed from
+  `Robson Oliveira_Brazil.docx`); the template-picker UI was removed. Its title, heading,
+  text and bullet styles and layout are reused.
+- **Output base folder:** provided by the user and persisted to `settings.json`; it is now
+  required (no silent default).
+- **Output path:** `<base>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.pdf` (and `.docx`).
+  The JSON person-name field is `personNameOnCV`.
+
 ## Remaining optional work
-- **LibreOffice (environment):** not installed on this machine, so PDF currently uses
-  the low-fidelity text fallback (a warning is surfaced in the UI). For a styled PDF
-  matching the DOCX: `brew install --cask libreoffice`.
-- **Nice-to-haves:** support for multiple template designs (only the `_Brazil` style
-  structure is targeted); richer per-bullet formatting.
+- **LibreOffice:** installed — full-fidelity PDF works. (If run on a machine without it,
+  the app falls back to a text PDF and warns in the UI.)
+- **Nice-to-haves:** support for multiple template designs (only `cv_template.docx` is
+  targeted); richer per-bullet formatting; the UI still loads React/Babel from a CDN.
 
 ## How to run
 ```bash
@@ -60,7 +68,7 @@ pip install -r requirements.txt
 python3 app.py
 # open http://127.0.0.1:8000
 ```
-Outputs land in `output/<yy_mm_dd>/<name>_<company>.docx` and `.pdf`.
+Outputs land in `<base>/<yy_mm_dd>/<personNameOnCV>_<companyNameApplyJob>.docx` and `.pdf`.
 
 ## How to test
 ```bash

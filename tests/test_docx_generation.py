@@ -5,11 +5,11 @@ from docx import Document
 
 import app
 
-TEMPLATE = Path(__file__).resolve().parent.parent / "Robson Oliveira_Brazil.docx"
+TEMPLATE = Path(__file__).resolve().parent.parent / "cv_template.docx"
 
 SAMPLE_DATA = {
     "companyNameApplyJob": "Acme Corp",
-    "name": "Jane Doe",
+    "personNameOnCV": "Jane Doe",
     "contact": "Berlin, Germany • jane.doe@example.com",
     "summary": "Senior engineer with a focus on ML platforms.",
     "experience": [

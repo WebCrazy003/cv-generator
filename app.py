@@ -17,9 +17,9 @@ from docx.oxml.ns import qn
 ROOT_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT_DIR / "frontend"
 SETTINGS_FILE = ROOT_DIR / "settings.json"
-OUTPUT_ROOT = ROOT_DIR / "output"
+TEMPLATE_FILE = ROOT_DIR / "cv_template.docx"
 
-DEFAULT_SETTINGS = {"templates": [], "activeTemplate": "", "outputDirectory": str(OUTPUT_ROOT)}
+DEFAULT_SETTINGS = {"outputDirectory": ""}
 
 
 def load_settings():
@@ -177,7 +177,7 @@ def build_docx(template_path, data, output_path):
         else:
             body.append(element)
 
-    name = str(data.get("name") or "").strip()
+    name = str(data.get("personNameOnCV") or "").strip()
     contact = str(data.get("contact") or "").strip()
     summary = str(data.get("summary") or "").strip()
     experience = data.get("experience") or []
@@ -380,15 +380,16 @@ class CvGeneratorHandler(BaseHTTPRequestHandler):
                 if not json_content:
                     raise ValueError("The JSON content is empty.")
                 data = json.loads(json_content)
-                template_path = payload.get("templatePath")
-                output_directory = payload.get("outputDirectory") or str(OUTPUT_ROOT)
-                if not template_path:
-                    raise ValueError("Please select an active DOCX template path.")
-                template_path = Path(template_path).expanduser()
-                if not template_path.exists():
-                    raise ValueError(f"Template path does not exist: {template_path}")
-                if not template_path.suffix.lower() == ".docx":
-                    raise ValueError("The selected template must be a .docx file.")
+
+                if not TEMPLATE_FILE.exists():
+                    raise ValueError(f"Template not found: {TEMPLATE_FILE.name}. "
+                                     "Place cv_template.docx next to app.py.")
+
+                output_directory = (payload.get("outputDirectory") or "").strip()
+                if not output_directory:
+                    raise ValueError("Please provide an output base folder.")
+                # Persist the base folder so it is remembered across sessions.
+                save_settings({"outputDirectory": output_directory})
 
                 output_directory_path = Path(output_directory).expanduser()
                 output_directory_path.mkdir(parents=True, exist_ok=True)
@@ -397,11 +398,11 @@ class CvGeneratorHandler(BaseHTTPRequestHandler):
                 output_folder.mkdir(parents=True, exist_ok=True)
 
                 company_name = sanitize_name(data.get("companyNameApplyJob") or "cv")
-                person_name = sanitize_name(data.get("name") or template_path.stem)
+                person_name = sanitize_name(data.get("personNameOnCV") or "cv")
                 pdf_path = output_folder / f"{person_name}_{company_name}.pdf"
                 docx_path = output_folder / f"{person_name}_{company_name}.docx"
 
-                build_docx(template_path, data, docx_path)
+                build_docx(TEMPLATE_FILE, data, docx_path)
                 warning = convert_to_pdf(docx_path, pdf_path)
 
                 response = {"status": "success", "pdfPath": str(pdf_path), "docxPath": str(docx_path)}
