@@ -8,9 +8,12 @@ import app
 TEMPLATE = Path(__file__).resolve().parent.parent / "cv_template.docx"
 
 SAMPLE_DATA = {
-    "companyNameApplyJob": "Acme Corp",
     "personNameOnCV": "Jane Doe",
-    "contact": "Berlin, Germany • jane.doe@example.com",
+    "personLocation": "Berlin, Germany",
+    "personEmail": "jane.doe@example.com",
+    "personUniversity": "TU Berlin",
+    "personDegree": "BSc Computer Science",
+    "companyNameApplyJob": "Acme Corp",
     "summary": "Senior engineer with a focus on ML platforms.",
     "experience": [
         {
@@ -32,9 +35,6 @@ SAMPLE_DATA = {
         {"categoryName": "Programming Languages", "skillItems": ["Python", "SQL"]},
         {"categoryName": "MLOps", "skillItems": ["Docker", "Kubernetes"]},
     ],
-    "education": [
-        {"institution": "TU Berlin", "degree": "BSc Computer Science"},
-    ],
 }
 
 
@@ -53,9 +53,17 @@ def test_output_has_no_leftover_tokens():
 
 def test_output_contains_injected_content():
     _, text = _generate()
-    for expected in ["Jane Doe", "SoftXPro", "Backend Engineer", "TU Berlin",
+    for expected in ["Jane Doe", "SoftXPro", "Backend Engineer",
                      "Programming Languages: Python, SQL"]:
         assert expected in text, expected
+
+
+def test_output_contains_contact_and_education_fields():
+    _, text = _generate()
+    # Location and email are written together on the contact line.
+    assert "Berlin, Germany • jane.doe@example.com" in text
+    # University and degree are written together on the education line.
+    assert "TU Berlin | BSc Computer Science" in text
 
 
 def test_output_drops_original_sample_content():

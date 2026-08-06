@@ -1,9 +1,12 @@
 const { useEffect, useMemo, useState } = React;
 
 const defaultJson = `{
-  "companyNameApplyJob": "Acme Corp",
   "personNameOnCV": "Jane Doe",
-  "contact": "Berlin, Germany • jane.doe@example.com",
+  "personLocation": "Berlin, Germany",
+  "personEmail": "jane.doe@example.com",
+  "personUniversity": "Technical University",
+  "personDegree": "BSc Computer Science",
+  "companyNameApplyJob": "Acme Corp",
   "summary": "Experienced software engineer with a strong focus on product delivery and technical leadership.",
   "experience": [
     {
@@ -16,9 +19,6 @@ const defaultJson = `{
   ],
   "skills": [
     { "categoryName": "Frontend", "skillItems": ["React", "TypeScript", "CSS"] }
-  ],
-  "education": [
-    { "institution": "Technical University", "degree": "BSc Computer Science" }
   ]
 }`;
 

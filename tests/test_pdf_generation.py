@@ -26,11 +26,14 @@ class PdfGenerationTests(unittest.TestCase):
             pdf_path = Path(tmp_dir) / "cv.pdf"
             data = {
                 "personNameOnCV": "Jane Doe",
+                "personLocation": "Berlin",
+                "personEmail": "jane@example.com",
+                "personUniversity": "Uni",
+                "personDegree": "BSc",
                 "summary": "Engineer",
                 "experience": [{"companyName": "SoftXPro", "jobTitle": "Eng",
                                 "startDate": "2023", "endDate": "2026", "content": ["Did work"]}],
                 "skills": [{"categoryName": "Lang", "skillItems": ["Python"]}],
-                "education": [{"institution": "Uni", "degree": "BSc"}],
             }
             app.build_docx(TEMPLATE, data, docx_path)
 

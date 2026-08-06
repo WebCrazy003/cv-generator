@@ -49,18 +49,24 @@ The template is fixed (`cv_template.docx`, next to `app.py`); there is no templa
 
 ```json
 {
-  "companyNameApplyJob": "Acme Corp",
   "personNameOnCV": "Jane Doe",
-  "contact": "Berlin, Germany • jane.doe@example.com",
+  "personLocation": "Berlin, Germany",
+  "personEmail": "jane.doe@example.com",
+  "personUniversity": "TU Berlin",
+  "personDegree": "BSc Computer Science",
+  "companyNameApplyJob": "Acme Corp",
   "summary": "…",
   "experience": [
     {"companyName": "SoftXPro", "jobTitle": "Senior ML Engineer",
      "startDate": "11/2023", "endDate": "07/2026", "content": ["…"]}
   ],
-  "skills": [{"categoryName": "Programming Languages", "skillItems": ["Python", "SQL"]}],
-  "education": [{"institution": "TU Berlin", "degree": "BSc Computer Science"}]
+  "skills": [{"categoryName": "Programming Languages", "skillItems": ["Python", "SQL"]}]
 }
 ```
+
+`personLocation` and `personEmail` render together on the contact line
+(`Location • Email`); `personUniversity` and `personDegree` render together in the
+Education section (`University | Degree`).
 
 ## Tests
 

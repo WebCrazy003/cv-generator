@@ -178,11 +178,14 @@ def build_docx(template_path, data, output_path):
             body.append(element)
 
     name = str(data.get("personNameOnCV") or "").strip()
-    contact = str(data.get("contact") or "").strip()
+    location = str(data.get("personLocation") or "").strip()
+    email = str(data.get("personEmail") or "").strip()
+    contact = " • ".join(part for part in (location, email) if part)
     summary = str(data.get("summary") or "").strip()
     experience = data.get("experience") or []
     skills = data.get("skills") or []
-    education = data.get("education") or []
+    university = str(data.get("personUniversity") or "").strip()
+    degree = str(data.get("personDegree") or "").strip()
 
     if name:
         emit("name", name)
@@ -220,14 +223,10 @@ def build_docx(template_path, data, output_path):
             elif category:
                 emit("skill", category)
 
-    if education:
+    if university or degree:
         emit("header", "Education")
-        for item in education:
-            institution = str(item.get("institution") or "").strip()
-            degree = str(item.get("degree") or "").strip()
-            line = " | ".join(part for part in (institution, degree) if part)
-            if line:
-                emit("education", line)
+        line = " | ".join(part for part in (university, degree) if part)
+        emit("education", line)
 
     document.save(str(output_path))
 

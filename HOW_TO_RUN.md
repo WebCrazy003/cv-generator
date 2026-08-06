@@ -77,9 +77,12 @@ Acme Corp →
 
 ```json
 {
-  "companyNameApplyJob": "Acme Corp",
   "personNameOnCV": "Jane Doe",
-  "contact": "Berlin, Germany • jane.doe@example.com",
+  "personLocation": "Berlin, Germany",
+  "personEmail": "jane.doe@example.com",
+  "personUniversity": "TU Berlin",
+  "personDegree": "BSc Computer Science",
+  "companyNameApplyJob": "Acme Corp",
   "summary": "One-paragraph professional summary.",
   "experience": [
     {
@@ -92,18 +95,16 @@ Acme Corp →
   ],
   "skills": [
     { "categoryName": "Programming Languages", "skillItems": ["Python", "SQL"] }
-  ],
-  "education": [
-    { "institution": "TU Berlin", "degree": "BSc Computer Science" }
   ]
 }
 ```
 
 Notes:
 - `personNameOnCV` becomes the CV title **and** part of the filename.
+- `personLocation` + `personEmail` render on the contact line as `Location • Email`.
+- `personUniversity` + `personDegree` render in the Education section as `University | Degree`.
 - `companyNameApplyJob` is used only in the filename.
-- `experience`, `skills` and `education` accept **any number** of entries; empty sections
-  are skipped.
+- `experience` and `skills` accept **any number** of entries; empty sections are skipped.
 
 ---
 
