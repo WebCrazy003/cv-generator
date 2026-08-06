@@ -1,20 +1,25 @@
+import copy
 import json
 import mimetypes
 import os
 import re
 import shutil
-import tempfile
-import zipfile
+import subprocess
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
-from xml.sax.saxutils import escape
+
+from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 ROOT_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT_DIR / "frontend"
 SETTINGS_FILE = ROOT_DIR / "settings.json"
 OUTPUT_ROOT = ROOT_DIR / "output"
+
+DEFAULT_SETTINGS = {"templates": [], "activeTemplate": "", "outputDirectory": str(OUTPUT_ROOT)}
 
 
 def load_settings():
@@ -22,8 +27,8 @@ def load_settings():
         try:
             return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            return {"templates": [], "activeTemplate": "", "outputDirectory": str(OUTPUT_ROOT)}
-    return {"templates": [], "activeTemplate": "", "outputDirectory": str(OUTPUT_ROOT)}
+            return dict(DEFAULT_SETTINGS)
+    return dict(DEFAULT_SETTINGS)
 
 
 def save_settings(settings):
@@ -37,128 +42,252 @@ def sanitize_name(value):
     return value or "cv"
 
 
-def build_experience_text(experience_items):
-    if not experience_items:
-        return "No experience information provided."
+# ---------------------------------------------------------------------------
+# DOCX generation
+#
+# The template (e.g. Robson Oliveira_Brazil.docx) is a fully-formatted sample
+# CV. Rather than string-replacing tokens (which fails because tokens are split
+# across runs and are followed by hardcoded content), we treat the template as a
+# *style carrier*: we harvest one "prototype" paragraph per element type, wipe
+# the body, then rebuild the document from the JSON data by cloning those
+# prototypes. Cloning preserves the exact fonts, colors, list numbering and
+# paragraph styles of the original template.
+# ---------------------------------------------------------------------------
 
-    blocks = []
-    for item in experience_items:
-        company = item.get("companyName", "")
-        title = item.get("jobTitle", "")
-        start_date = item.get("startDate", "")
-        end_date = item.get("endDate", "")
-        content = item.get("content") or []
-        header = f"{company} | {title} | {start_date} - {end_date}".strip()
-        blocks.append(header)
-        for bullet in content:
-            blocks.append(f"- {bullet}")
-        blocks.append("")
-    return "\n".join(blocks).strip()
+MARKER_RE = re.compile(r"\{\{[^}]*\}\}|\[\[[^\]]*\]\]")
 
 
-def build_skills_text(skills):
-    if not skills:
-        return "No skills information provided."
-
-    blocks = []
-    for item in skills:
-        category = item.get("categoryName", "")
-        entries = item.get("skillItems") or []
-        if category and entries:
-            blocks.append(f"{category}: {', '.join(entries)}")
-        elif category:
-            blocks.append(category)
-    return "\n".join(blocks).strip()
+def _pstyle_id(paragraph):
+    ppr = paragraph._p.find(qn("w:pPr"))
+    if ppr is None:
+        return None
+    pstyle = ppr.find(qn("w:pStyle"))
+    return pstyle.get(qn("w:val")) if pstyle is not None else None
 
 
-def build_replacement_map(payload):
-    data = payload.get("data", {})
-    company_name = data.get("companyNameApplyJob") or "cv"
-    summary = data.get("summary") or ""
-    experience_items = data.get("experience") or []
-    skills_items = data.get("skills") or []
-    experience_text = build_experience_text(experience_items)
-    skills_text = build_skills_text(skills_items)
-
-    replacements = {
-        "{{companyNameApplyJob}}": company_name,
-        "[[companyNameApplyJob]]": company_name,
-        "{{CompanyNameApplyJob}}": company_name,
-        "{{summary}}": summary,
-        "[[summary]]": summary,
-        "{{Summary}}": summary,
-        "{{experience}}": experience_text,
-        "[[experience]]": experience_text,
-        "{{Experience}}": experience_text,
-        "{{skills}}": skills_text,
-        "[[skills]]": skills_text,
-        "{{Skills}}": skills_text,
-    }
-
-    for index, item in enumerate(experience_items, start=1):
-        company_name_value = item.get("companyName", "")
-        job_title_value = item.get("jobTitle", "")
-        content_value = "\n".join(item.get("content") or [])
-        replacements[f"{{{{company{index}}}}}"] = company_name_value
-        replacements[f"{{{{company{index}Name}}}}"] = company_name_value
-        replacements[f"{{{{jobTitle{index}}}}}"] = job_title_value
-        replacements[f"{{{{content{index}}}}}"] = content_value
-        replacements[f"{{{{company{index}Details}}}}"] = f"{company_name_value} - {job_title_value}".strip(" -")
-        replacements[f"{{{{Company{index}}}}}"] = company_name_value
-        replacements[f"{{{{Company{index}Name}}}}"] = company_name_value
-        replacements[f"{{{{JobTitle{index}}}}}"] = job_title_value
-        replacements[f"{{{{Content{index}}}}}"] = content_value
-
-    return replacements
+def _is_list(paragraph):
+    ppr = paragraph._p.find(qn("w:pPr"))
+    return ppr is not None and ppr.find(qn("w:numPr")) is not None
 
 
-def replace_placeholders(xml_text, replacements):
-    updated_text = xml_text
-    for token, value in replacements.items():
-        updated_text = updated_text.replace(token, escape(str(value)))
-    return updated_text
+def _strip_markers(text):
+    return MARKER_RE.sub("", text)
 
 
-def generate_docx(template_path, payload, output_path):
-    replacements = build_replacement_map(payload)
+def harvest_prototypes(document):
+    """Locate one representative paragraph element for each CV element type."""
+    protos = {}
+    skills_idx = education_idx = None
+    paragraphs = document.paragraphs
+
+    for index, paragraph in enumerate(paragraphs):
+        text = paragraph.text
+        pstyle = _pstyle_id(paragraph)
+        if "{{Skills}}" in text:
+            skills_idx = index
+        if "{{Education}}" in text:
+            education_idx = index
+        if "name" not in protos and index == 0:
+            protos["name"] = paragraph._p
+        if "contact" not in protos and pstyle == "91":
+            protos["contact"] = paragraph._p
+        if "summary" not in protos and "{{summary}}" in text:
+            protos["summary"] = paragraph._p
+        if "header" not in protos and pstyle == "2":
+            protos["header"] = paragraph._p
+        if "date" not in protos and pstyle == "3":
+            protos["date"] = paragraph._p
+        if "title" not in protos and pstyle == "4" and "{{company" in text:
+            protos["title"] = paragraph._p
+        if "bullet" not in protos and _is_list(paragraph):
+            protos["bullet"] = paragraph._p
+        if "spacer" not in protos and not paragraph.runs and pstyle is None:
+            protos["spacer"] = paragraph._p
+
+    # Skill lines and education lines share pStyle/list traits with bullets/titles
+    # but carry different inline formatting, so harvest them from their sections.
+    if skills_idx is not None:
+        for paragraph in paragraphs[skills_idx + 1:]:
+            if _is_list(paragraph):
+                protos["skill"] = paragraph._p
+                break
+    if education_idx is not None:
+        for paragraph in paragraphs[education_idx + 1:]:
+            if _pstyle_id(paragraph) == "4":
+                protos["education"] = paragraph._p
+                break
+
+    # Deep-copy so later body wiping cannot disturb the prototypes.
+    return {key: copy.deepcopy(element) for key, element in protos.items()}
+
+
+def _clone_paragraph(proto_element, text):
+    """Clone a prototype paragraph, collapsing it to a single run with `text`."""
+    new_p = copy.deepcopy(proto_element)
+    runs = new_p.findall(qn("w:r"))
+    for extra in runs[1:]:
+        new_p.remove(extra)
+    if runs:
+        first = runs[0]
+        for child in list(first):
+            if child.tag != qn("w:rPr"):
+                first.remove(child)
+        text_el = OxmlElement("w:t")
+        text_el.set(qn("xml:space"), "preserve")
+        text_el.text = text
+        first.append(text_el)
+    return new_p
+
+
+def build_docx(template_path, data, output_path):
     template_path = Path(template_path).expanduser()
     output_path = Path(output_path).expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not template_path.exists():
         raise FileNotFoundError(f"Template path does not exist: {template_path}")
 
-    with zipfile.ZipFile(template_path, "r") as source_zip:
-        temp_dir = Path(tempfile.mkdtemp(prefix="cv-template-", dir=str(ROOT_DIR / "tmp")))
+    document = Document(str(template_path))
+    protos = harvest_prototypes(document)
+
+    body = document.element.body
+    sect_pr = body.find(qn("w:sectPr"))
+
+    # Wipe existing body content (keep section properties).
+    for child in list(body):
+        if child.tag in (qn("w:p"), qn("w:tbl")):
+            body.remove(child)
+
+    def emit(proto_key, text):
+        proto = protos.get(proto_key)
+        if proto is None:
+            return
+        element = _clone_paragraph(proto, text)
+        if sect_pr is not None:
+            sect_pr.addprevious(element)
+        else:
+            body.append(element)
+
+    def emit_spacer():
+        proto = protos.get("spacer")
+        if proto is None:
+            return
+        element = copy.deepcopy(proto)
+        if sect_pr is not None:
+            sect_pr.addprevious(element)
+        else:
+            body.append(element)
+
+    name = str(data.get("name") or "").strip()
+    contact = str(data.get("contact") or "").strip()
+    summary = str(data.get("summary") or "").strip()
+    experience = data.get("experience") or []
+    skills = data.get("skills") or []
+    education = data.get("education") or []
+
+    if name:
+        emit("name", name)
+    if contact:
+        emit("contact", contact)
+    emit_spacer()
+    if summary:
+        emit("summary", _strip_markers(summary))
+
+    if experience:
+        emit("header", "Experience")
+        for position, item in enumerate(experience):
+            start = str(item.get("startDate") or "").strip()
+            end = str(item.get("endDate") or "").strip()
+            date_text = f"{start} – {end}".strip(" –") if (start or end) else ""
+            job_title = str(item.get("jobTitle") or "").strip()
+            company = str(item.get("companyName") or "").strip()
+            title_text = " | ".join(part for part in (job_title, company) if part)
+            if date_text:
+                emit("date", date_text)
+            if title_text:
+                emit("title", title_text)
+            for bullet in item.get("content") or []:
+                emit("bullet", str(bullet))
+            if position != len(experience) - 1:
+                emit_spacer()
+
+    if skills:
+        emit("header", "Skills")
+        for item in skills:
+            category = str(item.get("categoryName") or "").strip()
+            entries = item.get("skillItems") or []
+            if category and entries:
+                emit("skill", f"{category}: {', '.join(entries)}")
+            elif category:
+                emit("skill", category)
+
+    if education:
+        emit("header", "Education")
+        for item in education:
+            institution = str(item.get("institution") or "").strip()
+            degree = str(item.get("degree") or "").strip()
+            line = " | ".join(part for part in (institution, degree) if part)
+            if line:
+                emit("education", line)
+
+    document.save(str(output_path))
+
+
+# ---------------------------------------------------------------------------
+# PDF generation
+# ---------------------------------------------------------------------------
+
+def find_soffice():
+    """Return a path to a LibreOffice binary, or None if unavailable."""
+    for candidate in ("soffice", "libreoffice"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    mac_path = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
+    if mac_path.exists():
+        return str(mac_path)
+    return None
+
+
+def convert_to_pdf(docx_path, pdf_path):
+    """Convert DOCX to PDF via LibreOffice. Falls back to a simple text PDF.
+
+    Returns a warning string when the fallback was used, otherwise None.
+    """
+    docx_path = Path(docx_path)
+    pdf_path = Path(pdf_path)
+    soffice = find_soffice()
+    if soffice:
         try:
-            for item in source_zip.infolist():
-                target_path = temp_dir / item.filename
-                if item.is_dir():
-                    target_path.mkdir(parents=True, exist_ok=True)
-                    continue
+            subprocess.run(
+                [soffice, "--headless", "--convert-to", "pdf", "--outdir",
+                 str(pdf_path.parent), str(docx_path)],
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+            produced = pdf_path.parent / (docx_path.stem + ".pdf")
+            if produced != pdf_path and produced.exists():
+                shutil.move(str(produced), str(pdf_path))
+            if pdf_path.exists():
+                return None
+        except (subprocess.SubprocessError, OSError):
+            pass  # fall through to fallback
+    return build_pdf_fallback(pdf_path, docx_path)
 
-                try:
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                except FileExistsError:
-                    pass
 
-                data = source_zip.read(item.filename)
-                if item.filename.endswith(".xml") and item.filename.startswith("word/"):
-                    text = data.decode("utf-8", errors="ignore")
-                    updated = replace_placeholders(text, replacements)
-                    target_path.write_text(updated, encoding="utf-8")
-                else:
-                    target_path.write_bytes(data)
-            with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as out_zip:
-                for file_path in temp_dir.rglob("*"):
-                    if file_path.is_file():
-                        out_zip.write(file_path, file_path.relative_to(temp_dir).as_posix())
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+def build_pdf_fallback(pdf_path, docx_path):
+    """Write a minimal, dependency-free text PDF from the DOCX paragraph text."""
+    try:
+        document = Document(str(docx_path))
+        lines = [paragraph.text for paragraph in document.paragraphs]
+    except Exception:
+        lines = []
+    build_simple_pdf(pdf_path, lines)
+    return ("PDF was generated in a low-fidelity fallback mode. Install LibreOffice "
+            "(brew install --cask libreoffice) for a styled PDF matching the DOCX.")
 
 
 def build_simple_pdf(path, lines):
-    text = "\n".join(lines) if lines else ""
-    escaped_text = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     content_stream = "BT\n/F1 11 Tf\n72 760 Td\n"
     for line in lines:
         escaped_line = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
@@ -187,6 +316,10 @@ def build_simple_pdf(path, lines):
     Path(path).write_bytes(pdf_bytes)
 
 
+# ---------------------------------------------------------------------------
+# HTTP server
+# ---------------------------------------------------------------------------
+
 class CvGeneratorHandler(BaseHTTPRequestHandler):
     def _send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
@@ -205,9 +338,12 @@ class CvGeneratorHandler(BaseHTTPRequestHandler):
             self._send_json(load_settings())
             return
 
-        target_path = FRONTEND_DIR / parsed.path.lstrip("/")
-        if parsed.path in {"/", "/index.html"}:
-            target_path = FRONTEND_DIR / "index.html"
+        rel_path = "index.html" if parsed.path in {"/", "/index.html"} else parsed.path.lstrip("/")
+        target_path = (FRONTEND_DIR / rel_path).resolve()
+        # Guard against path traversal: the resolved path must stay inside FRONTEND_DIR.
+        if FRONTEND_DIR.resolve() not in target_path.parents and target_path != FRONTEND_DIR.resolve():
+            self._send_json({"error": "Not found"}, 404)
+            return
         if target_path.exists() and target_path.is_file():
             self.send_response(200)
             self.send_header("Content-Type", mimetypes.guess_type(str(target_path))[0] or "application/octet-stream")
@@ -257,43 +393,30 @@ class CvGeneratorHandler(BaseHTTPRequestHandler):
                 output_directory_path = Path(output_directory).expanduser()
                 output_directory_path.mkdir(parents=True, exist_ok=True)
                 today = datetime.now()
-                output_folder = output_directory_path / f"26_{today:%m}_{today:%d}"
+                output_folder = output_directory_path / f"{today:%y_%m_%d}"
                 output_folder.mkdir(parents=True, exist_ok=True)
 
                 company_name = sanitize_name(data.get("companyNameApplyJob") or "cv")
-                person_name = sanitize_name(template_path.stem)
+                person_name = sanitize_name(data.get("name") or template_path.stem)
                 pdf_path = output_folder / f"{person_name}_{company_name}.pdf"
                 docx_path = output_folder / f"{person_name}_{company_name}.docx"
 
-                generate_docx(template_path, {"data": data}, docx_path)
+                build_docx(template_path, data, docx_path)
+                warning = convert_to_pdf(docx_path, pdf_path)
 
-                pdf_lines = [
-                    f"Company: {data.get('companyNameApplyJob') or 'N/A'}",
-                    "",
-                    f"Summary: {data.get('summary') or 'N/A'}",
-                    "",
-                    "Experience:",
-                ]
-                for item in data.get("experience") or []:
-                    pdf_lines.append(f"- {item.get('companyName') or 'N/A'} | {item.get('jobTitle') or 'N/A'}")
-                    for bullet in item.get("content") or []:
-                        pdf_lines.append(f"  • {bullet}")
-                pdf_lines.append("")
-                pdf_lines.append("Skills:")
-                for item in data.get("skills") or []:
-                    pdf_lines.append(f"- {item.get('categoryName') or 'N/A'}: {', '.join(item.get('skillItems') or [])}")
-
-                build_simple_pdf(pdf_path, pdf_lines)
-                self._send_json({"status": "success", "pdfPath": str(pdf_path), "docxPath": str(docx_path)})
+                response = {"status": "success", "pdfPath": str(pdf_path), "docxPath": str(docx_path)}
+                if warning:
+                    response["warning"] = warning
+                self._send_json(response)
             except Exception as exc:  # pragma: no cover - surfaced to UI
                 self._send_json({"error": str(exc)}, 500)
                 return
+            return
 
         self._send_json({"error": "Not found"}, 404)
 
 
 def main():
-    os.makedirs(ROOT_DIR / "tmp", exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", 8000), CvGeneratorHandler)
     print("Server running on http://127.0.0.1:8000")
     server.serve_forever()

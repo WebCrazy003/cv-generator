@@ -2,6 +2,8 @@ const { useEffect, useMemo, useState } = React;
 
 const defaultJson = `{
   "companyNameApplyJob": "Acme Corp",
+  "name": "Jane Doe",
+  "contact": "Berlin, Germany • jane.doe@example.com",
   "summary": "Experienced software engineer with a strong focus on product delivery and technical leadership.",
   "experience": [
     {
@@ -14,6 +16,9 @@ const defaultJson = `{
   ],
   "skills": [
     { "categoryName": "Frontend", "skillItems": ["React", "TypeScript", "CSS"] }
+  ],
+  "education": [
+    { "institution": "Technical University", "degree": "BSc Computer Science" }
   ]
 }`;
 
@@ -102,7 +107,8 @@ function App() {
       if (!response.ok || data.error) {
         throw new Error(data.error || "Generation failed.");
       }
-      setStatus({ type: "success", message: `PDF created successfully at ${data.pdfPath}` });
+      const base = `Created DOCX at ${data.docxPath} and PDF at ${data.pdfPath}`;
+      setStatus({ type: "success", message: data.warning ? `${base} — ${data.warning}` : base });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Generation failed." });
     } finally {
@@ -115,7 +121,7 @@ function App() {
   return (
     <div className="card">
       <h1>CV Generator</h1>
-      <p className="muted">Paste JSON data, choose a DOCX template, and generate a PDF CV into your chosen folder.</p>
+      <p className="muted">Paste JSON data, choose a DOCX template, and generate a styled DOCX and PDF CV into your chosen folder.</p>
 
       <label><strong>JSON input</strong></label>
       <textarea value={jsonContent} onChange={(event) => setJsonContent(event.target.value)} />
@@ -150,7 +156,7 @@ function App() {
 
       <div className="row">
         <button onClick={handleGenerate} disabled={!canGenerate || isGenerating}>
-          {isGenerating ? "Creating PDF..." : "Create PDF CV"}
+          {isGenerating ? "Generating..." : "Generate CV (DOCX + PDF)"}
         </button>
       </div>
       {status.message ? <div className={`status ${status.type}`}>{status.message}</div> : null}
