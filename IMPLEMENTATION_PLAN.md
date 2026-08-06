@@ -1,155 +1,68 @@
-# CV Generator Implementation Status
+# CV Generator — Implementation Status
 
-## Executive Summary
-The CV generator application has been implemented as a local Python web app with a browser-based UI. The project now supports:
-- accepting JSON CV content,
-- selecting a DOCX template,
-- persisting template/output settings locally,
-- replacing placeholder tokens in DOCX content,
-- generating a DOCX output copy,
-- generating a basic PDF output,
-- and surfacing success or failure information in the UI.
+## Status: ✅ Complete
+The core generation engine has been rebuilt and the blocking template-compatibility
+issue is resolved. Output DOCX matches the template's styling with no leftover
+placeholder tokens and no sample content. All tests pass (`7 passed`). Committed on
+`main` as `2ebb23a`.
 
-The implementation is close to being usable end to end, but one remaining compatibility issue should be addressed in the next session: the placeholder mapping needs to support the full set of template tokens expected by the provided DOCX file, including the company2-style placeholders that the current template tests expect.
+One optional environment step remains (LibreOffice) for full-fidelity PDF — see below.
 
-## Current Status
-- Status: Core implementation complete, minor placeholder compatibility cleanup remains.
-- Last verified behavior: direct Python execution successfully created a DOCX file and a PDF file from a sample payload and a DOCX template.
-- Tests were not run in this step, per your instruction.
+## What changed (this iteration)
+The previous string-replace / zip-surgery engine was fundamentally broken for the
+provided template (see [DISCOVERY_REPORT.md](DISCOVERY_REPORT.md) for the diagnosis):
+tokens sat *before* hardcoded sample content and several were split across Word XML
+runs, so replacement silently no-op'd and duplicated content.
 
-## What Has Already Been Implemented
+It was replaced with a **`python-docx` prototype-clone builder** that reuses the
+template as a *style carrier*:
+- harvests one prototype paragraph per element type (name, contact, summary, section
+  header, job date, job title, bullet, skill line, education line),
+- wipes the document body,
+- rebuilds from the JSON data by cloning those prototypes — preserving exact fonts,
+  colors, list numbering and paragraph styles.
 
-### 1. Backend server and generation logic
-Implemented in [app.py](app.py).
+## Files
+- [app.py](app.py) — `build_docx()` (prototype-clone engine), `convert_to_pdf()`
+  (LibreOffice + text fallback), path-traversal guard, dated output folder.
+- [frontend/app.js](frontend/app.js) — sample JSON with `name`/`contact`/`education`,
+  PDF fallback warning surfaced, DOCX+PDF copy.
+- [frontend/index.html](frontend/index.html) — UI shell (unchanged).
+- [tests/test_docx_generation.py](tests/test_docx_generation.py) — asserts token-free
+  output, injected content present, sample content dropped, styles preserved, single-entry handling.
+- [tests/test_pdf_generation.py](tests/test_pdf_generation.py) — fallback PDF + `convert_to_pdf` coverage.
+- [requirements.txt](requirements.txt) — `python-docx>=1.2`.
+- [README.md](README.md) — setup, JSON shape, run/test instructions.
+- [DISCOVERY_REPORT.md](DISCOVERY_REPORT.md) — codebase discovery + defect resolution log.
 
-Included features:
-- lightweight HTTP server using Python's built-in HTTP stack,
-- JSON-based API endpoints:
-  - /api/health
-  - /api/settings
-  - /api/generate-cv
-- settings persistence to [settings.json](settings.json)
-- placeholder replacement for DOCX XML content,
-- DOCX packaging and output writing,
-- basic PDF generation as a fallback output,
-- output directory creation and naming logic,
-- file-name sanitization for generated outputs.
+## Resolved from the previous "Known Remaining Work"
+- ✅ Full template token coverage — tokens are no longer replaced individually; the
+  document is rebuilt from prototypes, so `{{summary}}`, `{{Experience}}`, `{{Skills}}`,
+  `{{Education}}`, `{{company1..N}}` are all handled regardless of run-splitting or count.
+- ✅ Run-split tokens (`{{Experience}}`/`{{Skills}}`/`{{Education}}`) — no longer relevant.
+- ✅ `{{Education}}` data path — `education` added to the JSON schema and rendered.
+- ✅ Company slots no longer input-count-driven — any number of experience entries works.
+- ✅ Layout fidelity — output preserves the template's styles/fonts/colors/bullets.
+- ✅ Failing test removed/replaced with a passing suite.
+- ✅ Hygiene: path-traversal guard, dated folder from `%y_%m_%d`, dead code removed,
+  `.claude/settings.local.json` untracked.
 
-### 2. Frontend UI
-Implemented in [frontend/index.html](frontend/index.html) and [frontend/app.js](frontend/app.js).
+## Remaining optional work
+- **LibreOffice (environment):** not installed on this machine, so PDF currently uses
+  the low-fidelity text fallback (a warning is surfaced in the UI). For a styled PDF
+  matching the DOCX: `brew install --cask libreoffice`.
+- **Nice-to-haves:** support for multiple template designs (only the `_Brazil` style
+  structure is targeted); richer per-bullet formatting.
 
-Included features:
-- textarea for JSON input,
-- add-template input and template list management,
-- use/remove template actions,
-- output directory field,
-- action button to generate the CV,
-- inline success/failure status message displayed under the action button,
-- disabled state while generation is in progress.
-
-### 3. Tests and project scaffolding
-Implemented in:
-- [tests/test_pdf_generation.py](tests/test_pdf_generation.py)
-- [tests/test_template_placeholders.py](tests/test_template_placeholders.py)
-- [tmp/inspect_docx.py](tmp/inspect_docx.py)
-
-These files provide a starting point for regression coverage around PDF generation and placeholder-token handling.
-
-## Files in the Project
-- [app.py](app.py) — main backend and generation logic
-- [frontend/index.html](frontend/index.html) — UI shell
-- [frontend/app.js](frontend/app.js) — UI interaction logic
-- [tests/test_pdf_generation.py](tests/test_pdf_generation.py) — PDF output sanity test
-- [tests/test_template_placeholders.py](tests/test_template_placeholders.py) — placeholder token expectations
-- [tmp/inspect_docx.py](tmp/inspect_docx.py) — temporary DOCX inspection helper
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — this handoff file
-- [settings.json](settings.json) — persisted local settings (if present)
-- [output](output) — generated output directory
-
-## Current Implementation Notes
-
-### Backend behavior
-The backend currently:
-- accepts a JSON payload from the UI,
-- parses the CV data,
-- reads the selected DOCX template,
-- replaces placeholder strings inside the Word XML files,
-- writes a new DOCX file to the output directory,
-- writes a simple PDF file alongside it.
-
-### Frontend behavior
-The frontend currently:
-- loads persisted template/output settings on startup,
-- lets the user add templates to a local list,
-- lets the user choose an active template,
-- sends the JSON and template selection to the backend,
-- displays the resulting success or error message under the action button.
-
-## Known Remaining Work
-The main remaining task for the next session is to finish placeholder compatibility with the provided DOCX template.
-
-### Specific gap to address
-The current replacement map should support all expected placeholder tokens from the template, including patterns like:
-- {{summary}}
-- {{Experience}}
-- {{Skills}}
-- {{company1}}
-- {{company2}}
-
-In practice, the next implementation pass should make sure the placeholder map covers the full template token set even when the input has only one or two experience entries, instead of relying on the number of available experience objects.
-
-## Suggested Next Session Plan
-
-### Priority 1 — finalize placeholder compatibility
-- inspect the real template tokens in the DOCX file
-- ensure the replacement map contains every expected token variant
-- make sure placeholders are replaced in a way that preserves the DOCX layout
-
-### Priority 2 — polish end-to-end generation
-- verify the generated DOCX opening correctly in Word
-- verify PDFs are generated for the intended output folder
-- confirm that the UI message clearly shows the generated file paths
-
-### Priority 3 — optional hardening
-- improve the PDF output to be more visually structured
-- add more robust placeholder handling for nested fields or repeated sections
-- expand regression tests once the template mapping is stable
-
-## How to Continue in a Fresh Session
-
-### Start the app
-Run:
+## How to run
 ```bash
+pip install -r requirements.txt
 python3 app.py
+# open http://127.0.0.1:8000
 ```
+Outputs land in `output/<yy_mm_dd>/<name>_<company>.docx` and `.pdf`.
 
-Then open:
-```text
-http://127.0.0.1:8000
+## How to test
+```bash
+python3 -m pytest -q
 ```
-
-### Use the app
-1. Paste JSON CV data into the text area.
-2. Add a path to a DOCX template.
-3. Choose the template from the list.
-4. Choose an output directory.
-5. Click the action button to generate the CV.
-
-### Expected generated files
-The app writes outputs into a dated folder such as:
-- output/26_MM_DD/<name>_<company>.docx
-- output/26_MM_DD/<name>_<company>.pdf
-
-## Notes for the Next Session
-- The project is already structured and runnable.
-- The backend and UI are implemented.
-- The main remaining work is template token compatibility.
-- No tests were run in this step, per your instruction.
-- The fresh session should focus on the placeholder replacement layer first, because that is the most likely remaining blocker for full template fidelity.
-
-## Short Version
-If you want the quickest continuation path, do this first:
-1. inspect the DOCX template placeholder tokens,
-2. expand the replacement map for all token variants,
-3. rerun the generation flow through the app,
-4. verify that the output DOCX and PDF are produced correctly.
