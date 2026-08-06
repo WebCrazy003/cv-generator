@@ -69,6 +69,14 @@ FONT_REMAP = {"Avenir Book": "Avenir"}
 # the top margin like the DOCX does. Tuned to the template's name size (35pt).
 NAME_TOP_PADDING_TWIPS = 200
 
+# The name sits in a shaded (highlight) box whose height is the line box. With
+# the template's default "auto" line rule LibreOffice top-aligns the name, so
+# the box has no space above the text and a large empty gap below (the font's
+# descent region, unused because the name has no descenders). Switching to an
+# "exact" line height near the natural line height makes LibreOffice vertically
+# center the text in the box instead. Tuned to the template's name size (35pt).
+NAME_LINE_HEIGHT_TWIPS = 800
+
 
 def normalize_fonts(document, mapping=FONT_REMAP):
     for rfonts in document.element.iter(qn("w:rFonts")):
@@ -250,11 +258,16 @@ def build_docx(template_path, data, output_path):
         emit("education", line)
 
     normalize_fonts(document)
-    _pad_first_paragraph_top(document)
+    _fix_name_paragraph(document)
     document.save(str(output_path))
 
 
-def _pad_first_paragraph_top(document, twips=NAME_TOP_PADDING_TWIPS):
+def _fix_name_paragraph(document):
+    """Adjust the name (first) paragraph for faithful PDF rendering.
+
+    - space before: nudge the whole block down to the page's top margin.
+    - exact line height: vertically center the name inside its shaded box.
+    """
     paragraphs = document.paragraphs
     if not paragraphs:
         return
@@ -265,7 +278,9 @@ def _pad_first_paragraph_top(document, twips=NAME_TOP_PADDING_TWIPS):
     if spacing is None:
         spacing = OxmlElement("w:spacing")
         ppr.append(spacing)
-    spacing.set(qn("w:before"), str(twips))
+    spacing.set(qn("w:before"), str(NAME_TOP_PADDING_TWIPS))
+    spacing.set(qn("w:line"), str(NAME_LINE_HEIGHT_TWIPS))
+    spacing.set(qn("w:lineRule"), "exact")
 
 
 # ---------------------------------------------------------------------------

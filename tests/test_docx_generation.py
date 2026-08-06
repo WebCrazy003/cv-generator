@@ -103,6 +103,18 @@ def test_section_styles_preserved():
     assert header_styles == ["Experience", "Skills", "Education"]
 
 
+def test_name_paragraph_centered_in_box():
+    output, _ = _generate()
+    from docx.oxml.ns import qn
+
+    ppr = Document(str(output)).paragraphs[0]._p.find(qn("w:pPr"))
+    spacing = ppr.find(qn("w:spacing"))
+    # Exact line height makes LibreOffice vertically center the name in its box.
+    assert spacing is not None
+    assert spacing.get(qn("w:lineRule")) == "exact"
+    assert spacing.get(qn("w:before")) == str(app.NAME_TOP_PADDING_TWIPS)
+
+
 def test_handles_single_experience_entry():
     data = dict(SAMPLE_DATA)
     data["experience"] = [SAMPLE_DATA["experience"][0]]
